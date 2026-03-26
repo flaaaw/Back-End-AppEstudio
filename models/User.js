@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
+  avatarUrl: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -9,6 +9,7 @@ const User  = require('./models/User');
 const authRoutes  = require('./routes/authRoutes');
 const chatRoutes  = require('./routes/chatRoutes');
 const videoRoutes = require('./routes/videoRoutes');
+const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
 app.use(cors());
@@ -122,7 +123,19 @@ app.get('/api/users/search', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Update own profile (no password change here)
+// Upload avatar for a user
+app.put('/api/users/:id/avatar', uploadManager.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Se requiere una imagen' });
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { avatarUrl: req.file.path } },
+      { new: true, select: '-password' }
+    );
+    if (!updated) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json({ avatarUrl: updated.avatarUrl });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
 app.put('/api/users/:id', async (req, res) => {
   try {
     const { name, career, semester, avatarUrl } = req.body;

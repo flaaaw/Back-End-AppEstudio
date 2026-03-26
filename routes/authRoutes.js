@@ -48,7 +48,7 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       token,
-      user: { id: user._id, name: user.name, email: user.email, career: user.career }
+      user: { id: user._id, name: user.name, email: user.email, career: user.career, semester: user.semester }
     });
 
   } catch (err) {
@@ -84,7 +84,7 @@ router.post('/login', async (req, res) => {
     const token = generateToken(user._id);
     res.json({
       token,
-      user: { id: user._id, name: user.name, email: user.email, career: user.career }
+      user: { id: user._id, name: user.name, email: user.email, career: user.career, semester: user.semester }
     });
 
   } catch (err) {
