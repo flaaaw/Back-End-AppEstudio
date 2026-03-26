@@ -5,6 +5,10 @@ const postSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  authorId: {
+    type: String,
+    default: ''
+  },
   timeInfo: {
     type: String,
     default: 'Recientemente'
