@@ -6,6 +6,7 @@ require('dotenv').config();
 const { uploadManager } = require('./config/cloudinaryConfig');
 const Post = require('./models/Post');
 const authRoutes = require('./routes/authRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 
 const app = express();
 app.use(cors());
@@ -25,6 +26,7 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: '🚀 AppEstudio API corriendo', version: '1.0.0' });
 });
 app.use('/api/auth', authRoutes);
+app.use('/api/chats', chatRoutes);
 
 // 1. Get all community posts
 app.get('/api/posts', async (req, res) => {
