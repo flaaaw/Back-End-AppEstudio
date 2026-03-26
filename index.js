@@ -21,6 +21,9 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 // --- ROUTES ---
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: '🚀 AppEstudio API corriendo', version: '1.0.0' });
+});
 app.use('/api/auth', authRoutes);
 
 // 1. Get all community posts
