@@ -6,6 +6,7 @@ require('dotenv').config();
 const { uploadManager } = require('./config/cloudinaryConfig');
 const Post  = require('./models/Post');
 const User  = require('./models/User');
+const Comment = require('./models/Comment');
 const authRoutes  = require('./routes/authRoutes');
 const chatRoutes  = require('./routes/chatRoutes');
 const videoRoutes = require('./routes/videoRoutes');
@@ -33,18 +34,32 @@ app.use('/api/chats',  chatRoutes);
 app.use('/api/videos', videoRoutes);
 
 // ── POSTS ──────────────────────────────────────────────────────────────────
-// Get all posts (newest first)
+// Get all posts (with pagination)
 app.get('/api/posts', async (req, res) => {
   try {
-    const posts = await Post.find().sort({ createdAt: -1 }).limit(100);
+    const limit = parseInt(req.query.limit) || 10;
+    const page  = parseInt(req.query.page)  || 1;
+    const skip  = (page - 1) * limit;
+
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     res.json(posts);
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Get posts by user
+// Get posts by user (with pagination)
 app.get('/api/posts/user/:userId', async (req, res) => {
   try {
-    const posts = await Post.find({ authorId: req.params.userId }).sort({ createdAt: -1 });
+    const limit = parseInt(req.query.limit) || 20;
+    const page  = parseInt(req.query.page)  || 1;
+    const skip  = (page - 1) * limit;
+
+    const posts = await Post.find({ authorId: req.params.userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     res.json(posts);
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
@@ -99,11 +114,34 @@ app.post('/api/posts/:id/like', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Increment comment count (basic; no full Comment model yet)
-app.post('/api/posts/:id/comment', async (req, res) => {
+// Get all comments for a post
+app.get('/api/posts/:id/comments', async (req, res) => {
   try {
-    const post = await Post.findByIdAndUpdate(req.params.id, { $inc: { comments: 1 } }, { new: true });
-    res.json({ comments: post.comments });
+    const comments = await Comment.find({ postId: req.params.id }).sort({ createdAt: 1 });
+    res.json(comments);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// Create a comment (authenticated)
+app.post('/api/posts/:id/comments', async (req, res) => {
+  try {
+    const { authorId, authorName, authorAvatar, content } = req.body;
+    if (!content) return res.status(400).json({ error: 'Contenido requerido' });
+
+    const newComment = new Comment({
+      postId: req.params.id,
+      authorId,
+      authorName,
+      authorAvatar: authorAvatar || '',
+      content
+    });
+
+    const saved = await newComment.save();
+    
+    // Increment post count
+    await Post.findByIdAndUpdate(req.params.id, { $inc: { comments: 1 } });
+    
+    res.status(201).json(saved);
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
