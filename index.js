@@ -9,6 +9,7 @@ const { uploadManager } = require('./config/cloudinaryConfig');
 const Post  = require('./models/Post');
 const User  = require('./models/User');
 const Comment = require('./models/Comment');
+const { sendNotification } = require('./firebaseAdmin');
 const authRoutes  = require('./routes/authRoutes');
 const chatRoutes  = require('./routes/chatRoutes');
 const videoRoutes = require('./routes/videoRoutes');
@@ -106,6 +107,15 @@ app.post('/api/posts', uploadManager.single('file'), async (req, res) => {
       mediaUrl: req.file ? req.file.path : null
     });
     const saved = await newPost.save();
+
+    // Send Notification to all users
+    sendNotification(
+      'all_users',
+      'Nueva publicación en la comunidad',
+      `${saved.author} ha compartido algo nuevo: "${saved.content.substring(0, 50)}..."`,
+      { type: 'post', postId: saved._id.toString() }
+    );
+
     res.status(201).json(saved);
   } catch (error) { res.status(500).json({ error: error.message }); }
 });

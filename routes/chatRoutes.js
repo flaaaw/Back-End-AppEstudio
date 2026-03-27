@@ -3,6 +3,7 @@ const router = express.Router();
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const { uploadManager } = require('../config/cloudinaryConfig');
+const { sendNotification } = require('../firebaseAdmin');
 
 // GET /api/chats/:userId  — get all chats for a user
 router.get('/:userId', async (req, res) => {
@@ -98,6 +99,14 @@ router.post('/:chatId/messages', async (req, res) => {
     const io = req.app.get('io');
     io.to(req.params.chatId).emit('message', message);
 
+    // Send Push Notification
+    sendNotification(
+      `chat_${req.params.chatId}`,
+      `Nuevo mensaje de ${senderName}`,
+      text.trim().substring(0, 100),
+      { chatId: req.params.chatId, type: 'chat' }
+    );
+
     res.status(201).json(message);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -127,6 +136,14 @@ router.post('/:chatId/messages/media', uploadManager.single('file'), async (req,
 
     const io = req.app.get('io');
     io.to(req.params.chatId).emit('message', message);
+
+    // Send Push Notification
+    sendNotification(
+      `chat_${req.params.chatId}`,
+      `Archivo de ${senderName}`,
+      text || '📎 Archivo adjunto',
+      { chatId: req.params.chatId, type: 'chat' }
+    );
 
     res.status(201).json(message);
   } catch (err) {
