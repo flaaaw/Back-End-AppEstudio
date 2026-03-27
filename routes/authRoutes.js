@@ -4,7 +4,12 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'appestudio_secret_key_2024';
-const generateToken = (id) => jwt.sign({ id }, JWT_SECRET, { expiresIn: '7d' });
+const generateToken = (user) =>
+  jwt.sign(
+    { id: user._id, name: user.name, email: user.email },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
 
 // Validation helpers
 const validateEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
@@ -44,7 +49,7 @@ router.post('/register', async (req, res) => {
     }
 
     const user = await User.create({ name, email, password, career, semester });
-    const token = generateToken(user._id);
+    const token = generateToken(user);
 
     res.status(201).json({
       token,
@@ -81,7 +86,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ errors: { password: 'Contraseña incorrecta' } });
     }
 
-    const token = generateToken(user._id);
+    const token = generateToken(user);
     res.json({
       token,
       user: { id: user._id, name: user.name, email: user.email, career: user.career, semester: user.semester }

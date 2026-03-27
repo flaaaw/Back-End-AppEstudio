@@ -4,6 +4,7 @@ const Post = require('../models/Post');
 const Comment = require('../models/Comment');
 const { uploadManager } = require('../config/cloudinaryConfig');
 const { sendNotification } = require('../firebaseAdmin');
+const authMiddleware = require('../middleware/authMiddleware');
 
 // GET /api/posts — List all posts with pagination
 router.get('/', async (req, res) => {
@@ -54,13 +55,33 @@ router.get('/user/:userId', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// POST /api/posts — Create a new post
-router.post('/', uploadManager.single('file'), async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const { author, authorId, title, content, tags, timeInfo } = req.body;
+    const stats = await Post.aggregate([
+      { $unwind: '$tags' },
+      { $group: { _id: '$tags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
+    res.json(stats);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+router.get('/tag/:tag', async (req, res) => {
+  try {
+    const posts = await Post.find({
+      tags: { $in: [new RegExp(req.params.tag, 'i')] }
+    }).sort({ createdAt: -1 }).limit(20);
+    res.json(posts);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// POST /api/posts — Create a new post
+router.post('/', authMiddleware, uploadManager.single('file'), async (req, res) => {
+  try {
+    const { author, title, content, tags, timeInfo } = req.body;
     const newPost = new Post({
-      author,
-      authorId: authorId || '',
+      author: author || req.user.name,
+      authorId: req.user.id,
       title,
       content,
       tags: tags ? tags.split(',').map(t => t.trim()) : [],
@@ -82,22 +103,22 @@ router.post('/', uploadManager.single('file'), async (req, res) => {
 });
 
 // DELETE /api/posts/:id — Delete own post
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post no encontrado' });
-    if (post.authorId !== userId) return res.status(403).json({ error: 'No autorizado' });
+    if (String(post.authorId) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     await post.deleteOne();
     res.json({ ok: true });
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 // POST /api/posts/:id/like — Toggle like
-router.post('/:id/like', async (req, res) => {
+router.post('/:id/like', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    const userId = req.user.id;
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post no encontrado' });
     const idx = post.likedBy.indexOf(userId);
@@ -121,15 +142,15 @@ router.get('/:id/comments', async (req, res) => {
 });
 
 // POST /api/posts/:id/comments — Create a comment
-router.post('/:id/comments', async (req, res) => {
+router.post('/:id/comments', authMiddleware, async (req, res) => {
   try {
-    const { authorId, authorName, authorAvatar, content } = req.body;
+    const { authorAvatar, content } = req.body;
     if (!content) return res.status(400).json({ error: 'Contenido requerido' });
 
     const newComment = new Comment({
       postId: req.params.id,
-      authorId,
-      authorName,
+      authorId: req.user.id,
+      authorName: req.user.name,
       authorAvatar: authorAvatar || '',
       content
     });

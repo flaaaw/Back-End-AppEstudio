@@ -4,11 +4,15 @@ const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const { uploadManager } = require('../config/cloudinaryConfig');
 const { sendNotification } = require('../firebaseAdmin');
+const authMiddleware = require('../middleware/authMiddleware');
 
 // GET /api/chats/:userId  — get all chats for a user
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authMiddleware, async (req, res) => {
   try {
-    const chats = await Chat.find({ participants: req.params.userId })
+    if (req.params.userId !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+    const chats = await Chat.find({ participants: req.user.id })
       .sort({ lastMessageAt: -1 });
     res.json(chats);
   } catch (err) {
@@ -17,10 +21,13 @@ router.get('/:userId', async (req, res) => {
 });
 
 // GET /api/chats/one/:chatId — get a single chat's info
-router.get('/one/:chatId', async (req, res) => {
+router.get('/one/:chatId', authMiddleware, async (req, res) => {
   try {
     const chat = await Chat.findById(req.params.chatId);
     if (!chat) return res.status(404).json({ error: 'Chat no encontrado' });
+    if (!chat.participants.includes(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     res.json(chat);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -28,9 +35,12 @@ router.get('/one/:chatId', async (req, res) => {
 });
 
 // POST /api/chats  — create or retrieve a direct chat between two users
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { userId, userId2, userName, userName2, isGroup, groupName } = req.body;
+    if (userId !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
 
     if (isGroup) {
       const chat = await Chat.create({
@@ -62,11 +72,23 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/chats/:chatId/messages  — get messages in a chat
-router.get('/:chatId/messages', async (req, res) => {
+router.get('/:chatId/messages', authMiddleware, async (req, res) => {
   try {
-    const messages = await Message.find({ chatId: req.params.chatId })
-      .sort({ createdAt: 1 })
-      .limit(100);
+    const chat = await Chat.findById(req.params.chatId);
+    if (!chat) return res.status(404).json({ error: 'Chat no encontrado' });
+    if (!chat.participants.includes(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    const before = req.query.before;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const filter = { chatId: req.params.chatId };
+    if (before) filter.createdAt = { $lt: new Date(before) };
+
+    const messages = await Message.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit);
+    messages.reverse();
     res.json(messages);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -74,27 +96,29 @@ router.get('/:chatId/messages', async (req, res) => {
 });
 
 // POST /api/chats/:chatId/messages  — send a text message
-router.post('/:chatId/messages', async (req, res) => {
+router.post('/:chatId/messages', authMiddleware, async (req, res) => {
   try {
-    const { senderId, senderName, text } = req.body;
+    const { text } = req.body;
     if (!text || text.trim() === '') {
       return res.status(400).json({ error: 'El mensaje no puede estar vacío' });
+    }
+    const chat = await Chat.findById(req.params.chatId);
+    if (!chat) return res.status(404).json({ error: 'Chat no encontrado' });
+    if (!chat.participants.includes(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
     }
 
     const message = await Message.create({
       chatId: req.params.chatId,
-      senderId,
-      senderName,
+      senderId: req.user.id,
+      senderName: req.user.name,
       text: text.trim()
     });
 
     // Update chat's last message
-    const chat = await Chat.findById(req.params.chatId);
-    if (chat) {
-      chat.lastMessage = chat.isGroup ? `${senderName}: ${text.trim()}` : text.trim();
-      chat.lastMessageAt = new Date();
-      await chat.save();
-    }
+    chat.lastMessage = chat.isGroup ? `${req.user.name}: ${text.trim()}` : text.trim();
+    chat.lastMessageAt = new Date();
+    await chat.save();
 
     const io = req.app.get('io');
     io.to(req.params.chatId).emit('message', message);
@@ -114,25 +138,28 @@ router.post('/:chatId/messages', async (req, res) => {
 });
 
 // POST /api/chats/:chatId/messages/media  — send message with file attachment
-router.post('/:chatId/messages/media', uploadManager.single('file'), async (req, res) => {
+router.post('/:chatId/messages/media', authMiddleware, uploadManager.single('file'), async (req, res) => {
   try {
-    const { senderId, senderName, text, mediaType } = req.body;
+    const { text, mediaType } = req.body;
     const mediaUrl = req.file ? req.file.path : null;
+    const chat = await Chat.findById(req.params.chatId);
+    if (!chat) return res.status(404).json({ error: 'Chat no encontrado' });
+    if (!chat.participants.includes(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
 
     const message = await Message.create({
       chatId: req.params.chatId,
-      senderId, senderName,
+      senderId: req.user.id,
+      senderName: req.user.name,
       text: text || '',
       mediaUrl,
       mediaType: mediaType || null
     });
 
-    const chat = await Chat.findById(req.params.chatId);
-    if (chat) {
-      chat.lastMessage = chat.isGroup ? `${senderName}: ${text || '📎 Archivo'}` : (text || '📎 Archivo adjunto');
-      chat.lastMessageAt = new Date();
-      await chat.save();
-    }
+    chat.lastMessage = chat.isGroup ? `${req.user.name}: ${text || '📎 Archivo'}` : (text || '📎 Archivo adjunto');
+    chat.lastMessageAt = new Date();
+    await chat.save();
 
     const io = req.app.get('io');
     io.to(req.params.chatId).emit('message', message);
@@ -140,7 +167,7 @@ router.post('/:chatId/messages/media', uploadManager.single('file'), async (req,
     // Send Push Notification
     sendNotification(
       `chat_${req.params.chatId}`,
-      `Archivo de ${senderName}`,
+      `Archivo de ${req.user.name}`,
       text || '📎 Archivo adjunto',
       { chatId: req.params.chatId, type: 'chat' }
     );
@@ -152,16 +179,19 @@ router.post('/:chatId/messages/media', uploadManager.single('file'), async (req,
 });
 
 // PUT /api/chats/:chatId — update group info (name/participants)
-router.put('/:chatId', async (req, res) => {
+router.put('/:chatId', authMiddleware, async (req, res) => {
   try {
+    const chat = await Chat.findById(req.params.chatId);
+    if (!chat) return res.status(404).json({ error: 'Chat no encontrado' });
+    if (!chat.participants.includes(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     const { name, participants, participantNames } = req.body;
     const updated = await Chat.findByIdAndUpdate(
       req.params.chatId,
       { $set: { name, participants, participantNames } },
       { new: true }
     );
-    if (!updated) return res.status(404).json({ error: 'Chat no encontrado' });
-
     const io = req.app.get('io');
     io.to(req.params.chatId).emit('chat_updated', updated);
 

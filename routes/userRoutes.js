@@ -29,8 +29,11 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/users/:id/avatar — Upload avatar
-router.put('/:id/avatar', uploadManager.single('avatar'), async (req, res) => {
+router.put('/:id/avatar', authMiddleware, uploadManager.single('avatar'), async (req, res) => {
   try {
+    if (req.params.id !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     if (!req.file) return res.status(400).json({ error: 'Se requiere una imagen' });
     const updated = await User.findByIdAndUpdate(
       req.params.id,
@@ -43,8 +46,11 @@ router.put('/:id/avatar', uploadManager.single('avatar'), async (req, res) => {
 });
 
 // PUT /api/users/:id — Update profile
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, async (req, res) => {
   try {
+    if (req.params.id !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     const { name, career, semester, avatarUrl } = req.body;
     const updated = await User.findByIdAndUpdate(
       req.params.id,
