@@ -2,6 +2,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+const http = require('http');
+const { Server } = require('socket.io');
 
 const { uploadManager } = require('./config/cloudinaryConfig');
 const Post  = require('./models/Post');
@@ -13,9 +15,35 @@ const videoRoutes = require('./routes/videoRoutes');
 const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] }
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Socket.IO logic
+io.on('connection', (socket) => {
+  console.log(`🔌 User connected: ${socket.id}`);
+
+  socket.on('join', (userId) => {
+    socket.join(userId);
+    console.log(`👤 User ${userId} joined their private room`);
+  });
+
+  socket.on('join_chat', (chatId) => {
+    socket.join(chatId);
+    console.log(`🗨️ User joined chat room: ${chatId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`🔌 User disconnected: ${socket.id}`);
+  });
+});
+
+app.set('io', io);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -189,7 +217,7 @@ app.put('/api/users/:id', async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 

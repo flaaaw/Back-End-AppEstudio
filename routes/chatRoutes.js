@@ -15,6 +15,17 @@ router.get('/:userId', async (req, res) => {
   }
 });
 
+// GET /api/chats/one/:chatId — get a single chat's info
+router.get('/one/:chatId', async (req, res) => {
+  try {
+    const chat = await Chat.findById(req.params.chatId);
+    if (!chat) return res.status(404).json({ error: 'Chat no encontrado' });
+    res.json(chat);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/chats  — create or retrieve a direct chat between two users
 router.post('/', async (req, res) => {
   try {
@@ -77,10 +88,15 @@ router.post('/:chatId/messages', async (req, res) => {
     });
 
     // Update chat's last message
-    await Chat.findByIdAndUpdate(req.params.chatId, {
-      lastMessage: text.trim(),
-      lastMessageAt: new Date()
-    });
+    const chat = await Chat.findById(req.params.chatId);
+    if (chat) {
+      chat.lastMessage = chat.isGroup ? `${senderName}: ${text.trim()}` : text.trim();
+      chat.lastMessageAt = new Date();
+      await chat.save();
+    }
+
+    const io = req.app.get('io');
+    io.to(req.params.chatId).emit('message', message);
 
     res.status(201).json(message);
   } catch (err) {
@@ -102,12 +118,37 @@ router.post('/:chatId/messages/media', uploadManager.single('file'), async (req,
       mediaType: mediaType || null
     });
 
-    await Chat.findByIdAndUpdate(req.params.chatId, {
-      lastMessage: text || '📎 Archivo adjunto',
-      lastMessageAt: new Date()
-    });
+    const chat = await Chat.findById(req.params.chatId);
+    if (chat) {
+      chat.lastMessage = chat.isGroup ? `${senderName}: ${text || '📎 Archivo'}` : (text || '📎 Archivo adjunto');
+      chat.lastMessageAt = new Date();
+      await chat.save();
+    }
+
+    const io = req.app.get('io');
+    io.to(req.params.chatId).emit('message', message);
 
     res.status(201).json(message);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/chats/:chatId — update group info (name/participants)
+router.put('/:chatId', async (req, res) => {
+  try {
+    const { name, participants, participantNames } = req.body;
+    const updated = await Chat.findByIdAndUpdate(
+      req.params.chatId,
+      { $set: { name, participants, participantNames } },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ error: 'Chat no encontrado' });
+
+    const io = req.app.get('io');
+    io.to(req.params.chatId).emit('chat_updated', updated);
+
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
