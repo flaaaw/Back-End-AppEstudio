@@ -11,9 +11,19 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: 'appestudio_archivos',
-    resource_type: 'auto'
+  params: async (req, file) => {
+    // Por defecto, Cloudinary intenta adivinar (útil para imágenes y videos)
+    let resource_type = 'auto';
+    
+    // Si el archivo NO es imagen ni video (ej: PDF, DOCX, ZIP), lo forzamos como 'raw'
+    if (!file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+      resource_type = 'raw';
+    }
+
+    return {
+      folder: 'appestudio_archivos',
+      resource_type: resource_type,
+    };
   },
 });
 
