@@ -13,7 +13,6 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'appestudio_archivos',
-    allowedFormats: ['jpeg', 'png', 'jpg', 'pdf', 'mp4'],
     resource_type: 'auto'
   },
 });
