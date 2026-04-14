@@ -16,6 +16,19 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/videos/stats — get video counts grouped by topic
+router.get('/stats', async (req, res) => {
+  try {
+    const stats = await Video.aggregate([
+      { $group: { _id: '$topic', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/videos — upload a video (requires auth)
 router.post('/', authMiddleware, uploadManager.single('file'), async (req, res) => {
   try {
